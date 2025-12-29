@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Captcha - Earn ₹2.00</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            max-width: 350px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .reward {
+            background: rgba(0, 255, 128, 0.2);
+            color: #00ff80;
+            padding: 8px 15px;
+            border-radius: 50px;
+            font-size: 14px;
+            display: inline-block;
+            margin-bottom: 25px;
+            font-weight: bold;
+        }
+
+        .captcha-box {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .captcha-type {
+            font-size: 12px;
+            color: #a29bfe;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .math-problem {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 15px 0;
+            color: #fff;
+            letter-spacing: 2px;
+        }
+
+        .word-problem {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 15px 0;
+            color: #fff;
+            line-height: 1.4;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 15px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            border-color: #6c5ce7;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 92, 231, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .attempts {
+            margin-top: 15px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .result {
+            margin-top: 20px;
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .result.correct {
+            background: rgba(0, 255, 128, 0.2);
+            color: #00ff80;
+        }
+
+        .result.wrong {
+            background: rgba(255, 82, 82, 0.2);
+            color: #ff5252;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" id="gameContainer">
+        <h1>🔢 Solve Captcha</h1>
+        <div class="reward">💰 Earn ₹0.02</div>
+
+        <div class="captcha-box">
+            <div class="captcha-type" id="captchaType"></div>
+            <div id="problemContainer"></div>
+            <input type="text" id="answerInput" placeholder="Your Answer" autocomplete="off">
+            <button id="submitBtn" onclick="checkAnswer()">Submit Answer</button>
+            <div class="attempts" id="attemptsText"></div>
+        </div>
+
+        <div id="resultCorrect" class="result correct hidden">
+            ✅ Correct! Claiming reward...
+        </div>
+        <div id="resultWrong" class="result wrong hidden">
+            ❌ Wrong! Try again.
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        // Get token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token') || '';
+
+        let correctAnswer = '';
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        // Different captcha types
+        const captchaTypes = [
+            'addition', 'subtraction', 'multiplication', 'division',
+            'wordMath', 'sequence', 'reverse'
+        ];
+
+        function generateCaptcha() {
+            const type = captchaTypes[Math.floor(Math.random() * captchaTypes.length)];
+            const container = document.getElementById('problemContainer');
+            const typeLabel = document.getElementById('captchaType');
+            const input = document.getElementById('answerInput');
+
+            input.value = '';
+            document.getElementById('resultWrong').classList.add('hidden');
+            document.getElementById('submitBtn').disabled = false;
+
+            input.type = 'text';
+
+            switch (type) {
+                case 'addition': {
+                    const a = Math.floor(Math.random() * 50) + 10;
+                    const b = Math.floor(Math.random() * 50) + 10;
+                    correctAnswer = String(a + b);
+                    typeLabel.textContent = 'Addition';
+                    container.innerHTML = `<div class="math-problem">${a} + ${b} = ?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'subtraction': {
+                    const a = Math.floor(Math.random() * 50) + 50;
+                    const b = Math.floor(Math.random() * 40) + 10;
+                    correctAnswer = String(a - b);
+                    typeLabel.textContent = 'Subtraction';
+                    container.innerHTML = `<div class="math-problem">${a} - ${b} = ?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'multiplication': {
+                    const a = Math.floor(Math.random() * 12) + 2;
+                    const b = Math.floor(Math.random() * 12) + 2;
+                    correctAnswer = String(a * b);
+                    typeLabel.textContent = 'Multiplication';
+                    container.innerHTML = `<div class="math-problem">${a} × ${b} = ?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'division': {
+                    const b = Math.floor(Math.random() * 10) + 2;
+                    const result = Math.floor(Math.random() * 10) + 2;
+                    const a = b * result;
+                    correctAnswer = String(result);
+                    typeLabel.textContent = 'Division';
+                    container.innerHTML = `<div class="math-problem">${a} ÷ ${b} = ?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'wordMath': {
+                    const words = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+                    const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+                    const i = Math.floor(Math.random() * 9);
+                    const j = Math.floor(Math.random() * 9);
+                    correctAnswer = String(nums[i] + nums[j]);
+                    typeLabel.textContent = 'Word Math';
+                    container.innerHTML = `<div class="word-problem">What is ${words[i]} plus ${words[j]}?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'sequence': {
+                    const start = Math.floor(Math.random() * 10) + 1;
+                    const step = Math.floor(Math.random() * 5) + 2;
+                    const seq = [start, start + step, start + step * 2, start + step * 3];
+                    correctAnswer = String(start + step * 4);
+                    typeLabel.textContent = 'Complete the Sequence';
+                    container.innerHTML = `<div class="word-problem">${seq.join(', ')}, ?</div>`;
+                    input.type = 'number';
+                    break;
+                }
+                case 'reverse': {
+                    const num = Math.floor(Math.random() * 900) + 100;
+                    correctAnswer = String(num).split('').reverse().join('');
+                    typeLabel.textContent = 'Reverse the Number';
+                    container.innerHTML = `<div class="word-problem">Reverse: ${num}</div>`;
+                    input.type = 'number';
+                    break;
+                }
+            }
+            updateAttempts();
+            // Focus immediately
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function updateAttempts() {
+            document.getElementById('attemptsText').textContent = `Attempts: ${attempts}/${maxAttempts}`;
+        }
+
+        function checkAnswer() {
+            const userAnswer = document.getElementById('answerInput').value.trim();
+
+            if (userAnswer === correctAnswer) {
+                document.getElementById('resultCorrect').classList.remove('hidden');
+                document.getElementById('resultWrong').classList.add('hidden');
+                document.getElementById('submitBtn').disabled = true;
+
+                setTimeout(() => {
+                    tg.sendData('captcha_success:' + token);
+                    setTimeout(() => { tg.close(); }, 500);
+                }, 1000);
+            } else {
+                attempts++;
+                updateAttempts();
+
+                if (attempts >= maxAttempts) {
+                    document.getElementById('resultWrong').textContent = '❌ Too many attempts! Try again later.';
+                    document.getElementById('resultWrong').classList.remove('hidden');
+                    document.getElementById('submitBtn').disabled = true;
+
+                    setTimeout(() => {
+                        tg.sendData('captcha_failed:' + token);
+                        setTimeout(() => { tg.close(); }, 500);
+                    }, 1500);
+                } else {
+                    document.getElementById('resultWrong').classList.remove('hidden');
+                    document.getElementById('resultCorrect').classList.add('hidden');
+                    document.getElementById('answerInput').value = '';
+
+                    setTimeout(() => {
+                        document.getElementById('resultWrong').classList.add('hidden');
+                        generateCaptcha();
+                    }, 1000);
+                }
+            }
+        }
+
+        document.getElementById('answerInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                checkAnswer();
+            }
+        });
+
+        // Start game immediately
+        generateCaptcha();
+    </script>
+</body>
+
+</html>
+

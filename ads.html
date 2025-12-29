@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Ad</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 350px;
+        }
+
+        .icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            font-size: 16px;
+            color: #a0a0a0;
+            margin-bottom: 30px;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid #00d26a;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .success {
+            background: #00d26a;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .error {
+            background: #ff4757;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .btn {
+            background: #4a4aff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="icon">📺</div>
+        <h1 id="title">Loading Ad...</h1>
+        <p class="status" id="status">Please wait</p>
+        <div class="loader" id="loader"></div>
+        <div class="success" id="success">✅ Ad Completed!</div>
+        <div class="error" id="error">❌ Ad not available</div>
+        <button class="btn" id="watchBtn" onclick="showAd()">📺 Watch Ad Now</button>
+        <button class="btn" id="retryBtn" onclick="showAd()">🔄 Retry</button>
+    </div>
+
+    <!-- Load Monetag SDK -->
+    <script src='//libtl.com/sdk.js' data-zone='10293605' data-sdk='show_10293605'></script>
+
+    <script>
+        // Get token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        // Initialize Telegram WebApp
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+
+        let sdkReady = false;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        // Wait for SDK to load
+        function waitForSDK() {
+            attempts++;
+            if (typeof show_10293605 === 'function') {
+                sdkReady = true;
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('title').innerText = 'Ready!';
+                document.getElementById('status').innerText = 'Tap the button to watch ad';
+                document.getElementById('watchBtn').style.display = 'inline-block';
+            } else if (attempts < maxAttempts) {
+                setTimeout(waitForSDK, 500);
+            } else {
+                // SDK failed to load - show error
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('status').innerText = 'Ad service unavailable';
+                document.getElementById('retryBtn').style.display = 'inline-block';
+            }
+        }
+
+        function showAd() {
+            if (!sdkReady) {
+                document.getElementById('status').innerText = 'Loading...';
+                waitForSDK();
+                return;
+            }
+
+            // Hide buttons, show loader
+            document.getElementById('watchBtn').style.display = 'none';
+            document.getElementById('retryBtn').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('title').innerText = 'Playing Ad...';
+            document.getElementById('status').innerText = 'Please watch till end';
+
+            // Show Rewarded Interstitial ad
+            show_10293605().then(() => {
+                // Ad watched successfully
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('success').style.display = 'block';
+                document.getElementById('title').innerText = 'Done!';
+                document.getElementById('status').innerText = 'Reward claimed!';
+
+                // Send result to bot
+                if (token) {
+                    Telegram.WebApp.sendData('ad_success:' + token);
+                }
+
+                // Close after short delay
+                setTimeout(() => {
+                    Telegram.WebApp.close();
+                }, 1500);
+
+            }).catch(e => {
+                // Ad failed or was closed
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('title').innerText = 'Ad Failed';
+                document.getElementById('status').innerText = 'Please try again';
+                document.getElementById('retryBtn').style.display = 'inline-block';
+            });
+        }
+
+        // Start waiting for SDK on page load
+        setTimeout(waitForSDK, 1000);
+    </script>
+</body>
+
+</html>
